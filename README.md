@@ -1,1 +1,235 @@
+# 🎙️ Hidden Emotion Detection Using Voice Signals
 
+> A 3-stage deep learning framework that detects **suppressed and hidden emotions** in speech — emotions the speaker expresses outwardly versus what they actually feel underneath.
+
+---
+
+## 📌 Overview
+
+Human speech carries two emotional layers: the **explicit emotion** (what we express) and the **hidden emotion** (what we suppress). This project builds a system that detects both simultaneously using a HuBERT-based encoder with a novel **dual-path attention architecture**.
+
+The framework is trained on IEMOCAP and CREMA-D, and validated without any hidden emotion labels — using **inter-annotator disagreement entropy** as a proxy for emotional suppression. Where human raters disagreed on what emotion they heard, the model is expected to flag suppression.
+
+---
+
+## 🏗️ Architecture — 3-Stage Pipeline
+
+```
+Raw Audio (16kHz WAV)
+        │
+        ▼
+┌───────────────────────────────────────────────┐
+│  STAGE 1: HuBERT Supervised Fine-tuning        │
+│  • facebook/hubert-base-ls960                  │
+│  • IEMOCAP + CREMA-D (4-class: ang/hap/neu/sad)│
+│  • WeightedRandomSampler for class balance     │
+│  • Label smoothing (0.05), CosineAnnealingLR   │
+│  → Saves: stage1_best.pt                       │
+└────────────────────────┬──────────────────────┘
+                         │ Frozen encoder weights
+                         ▼
+┌───────────────────────────────────────────────┐
+│  STAGE 2: Self-Supervised Adapter Learning     │
+│  • Bottleneck adapters (768→64→768) per layer  │
+│  • Masked waveform reconstruction on CREMA-D  │
+│  • Only adapter params trained (encoder frozen)│
+│  • MSE loss on masked hidden frame regions     │
+│  → Saves: stage2_adapters.pt                  │
+└────────────────────────┬──────────────────────┘
+                         │ Frozen encoder + adapters
+                         ▼
+┌───────────────────────────────────────────────┐
+│  STAGE 3: Dual-Path Attention Training         │
+│                                                │
+│  Global Attention Path (utterance-level)       │
+│  → Explicit Emotion Head                       │
+│                                                │
+│  Local Attention Path (window=4 frames)        │
+│  → Hidden Emotion Head                         │
+│                                                │
+│  KL divergence between heads = Suppression     │
+│  Loss = CE_exp + CE_hid + λ_orth·cosine_sim    │
+│         − λ_div·KL                            │
+│  → Saves: stage3_best.pt                       │
+└───────────────────────────────────────────────┘
+        │                        │
+        ▼                        ▼
+ Explicit Emotion          KL Divergence Score
+ (what is expressed)       (suppression signal)
+```
+
+---
+
+## ✨ Key Innovations
+
+**Dual-Path Attention** — Two parallel attention mechanisms run on the same encoder output. The global path (single learnable query across full utterance) captures expressed emotion; the local path (windowed QKV with frame window=4) captures frame-level micro-expressions and suppressed states.
+
+**KL Divergence as Suppression Score** — The divergence between the two attention heads' softmax distributions is the suppression signal. High KL = the heads disagree = likely emotional suppression.
+
+**Label-Free Validation** — No hidden emotion ground truth labels exist in any public dataset. The system is validated using IEMOCAP inter-annotator disagreement entropy as a proxy: where human raters disagreed on an utterance, the model should flag suppression.
+
+**Composite Training Loss** — 
+```
+Loss = CE(explicit) + 1.0·CE(hidden) + 0.1·cosine_similarity − 0.1·KL
+```
+The orthogonality regularizer pushes the two attention paths to learn different representations. The negative KL term maximizes their divergence — forcing the hidden head to find an alternate emotional interpretation.
+
+---
+
+## 🛠️ Tech Stack
+
+| Component | Library / Tool |
+|---|---|
+| Speech encoder | `facebook/hubert-base-ls960` (HuBERT) |
+| Feature extraction | `Wav2Vec2FeatureExtractor` |
+| Deep learning | PyTorch, `torch.nn`, `torchaudio` |
+| Training infra | Google Colab (GPU), `WeightedRandomSampler` |
+| Datasets | IEMOCAP (Kaggle), CREMA-D (Kaggle) |
+| Validation | `scipy.stats` (Mann-Whitney U, Shannon entropy) |
+| Metrics | `sklearn` (classification report, AUC-ROC) |
+| Visualization | `matplotlib`, `gridspec` |
+
+---
+
+## 📊 Results
+
+### Explicit Emotion Classification (IEMOCAP Session 5)
+
+| Emotion | Precision | Recall | F1-Score | Support |
+|---|---|---|---|---|
+| Angry | 0.69 | 0.71 | 0.70 | 170 |
+| Happy | 0.70 | 0.60 | 0.65 | 442 |
+| Neutral | 0.62 | 0.73 | 0.67 | 384 |
+| Sad | 0.73 | 0.69 | 0.71 | 245 |
+| **Weighted Avg** | **0.68** | **0.67** | **0.67** | **1241** |
+
+**Overall Accuracy: 67%** on 4-class emotion classification
+
+### Hidden Emotion Detection Validation
+
+| Metric | Value |
+|---|---|
+| AUC-ROC | 0.5754 |
+| Mann-Whitney p-value | 0.0001 (statistically significant) |
+| Head disagreement (ambiguous utterances) | 0.072 |
+| Head disagreement (clear utterances) | 0.047 |
+| Best F1 (75th percentile KL threshold) | 0.292 |
+| Utterances flagged as suppressed | 4.4% (55/1241) |
+
+### Top Suppression Patterns (Expressed → Hidden)
+- happy → neutral: **31.6%** (most common suppression)
+- sad → neutral: **21.1%**
+- angry → happy / neutral / angry → neutral: ~10.5% each
+
+---
+
+## 🚀 Getting Started
+
+### 1. Clone & Open in Colab
+
+```bash
+git clone https://github.com/<your-username>/hidden-emotion-detection.git
+```
+
+Open `Hidden_Emotion_Detection_voice.ipynb` in [Google Colab](https://colab.research.google.com/) with GPU runtime.
+
+### 2. Dataset Setup
+
+Both datasets are downloaded via Kaggle API. Upload your `kaggle.json` when prompted:
+
+```python
+# IEMOCAP (~12hrs dyadic speech, 10 actors)
+kagglehub.dataset_download("dejolilandry/iemocapfullrelease")
+
+# CREMA-D (7442 clips, 91 actors, ages 20-74)
+kagglehub.dataset_download("ejlok1/cremad")
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install transformers datasets torchaudio scikit-learn pandas kaggle
+```
+
+### 4. Run Cells in Order
+
+| Cell | What it does |
+|---|---|
+| Cell 1–2 | Install + download datasets |
+| Cell 3 | Config (device, sample rate, emotion classes) |
+| Cell 4 | Model definitions (AdapterLayer, DualPathAttention, HiddenEmotionModel) |
+| Cell 5–7 | Dataset loaders + balanced sampler |
+| Cell 8 | Stage 1: HuBERT supervised fine-tuning |
+| Cell 9 | Stage 2: SSL adapter learning |
+| Cell 10 | Stage 3: Dual-path attention training |
+| Cell 11 | Final evaluation + hidden emotion analysis |
+| Cell 12 | Annotator disagreement validation (3 checks) |
+
+---
+
+## ⚙️ Configuration
+
+```python
+SAMPLE_RATE  = 16000
+MAX_LENGTH   = 6 * SAMPLE_RATE   # 6-second clips
+BATCH_SIZE   = 16
+EPOCHS_S1    = 8                  # Stage 1 supervised fine-tuning
+EPOCHS_SSL   = 3                  # Stage 2 adapter SSL
+EPOCHS_S3    = 8                  # Stage 3 dual-path attention
+GRAD_ACCUM   = 4                  # Effective batch = 64
+EMOTIONS     = ['angry', 'happy', 'neutral', 'sad']  # frustrated excluded
+```
+
+**Why `frustrated` was dropped:** Poor inter-annotator agreement, not present in CREMA-D, consistently lowest F1. Dropping it produces a cleaner 4-class model aligned with most literature.
+
+---
+
+## 🔍 Validation Methodology
+
+Since no ground truth labels for hidden emotions exist, validation uses a 3-check framework:
+
+**Check A — Detection Validity:** Does the KL score fire on utterances that human raters found ambiguous? Measured via AUC-ROC and Mann-Whitney U test against inter-annotator entropy.
+
+**Check B — Head Disagreement:** On high-entropy utterances, does the explicit head predict the majority label while the hidden head predicts a different emotion? The "smoking gun" cases (19 utterances) confirm this pattern.
+
+**Check C — Distribution Shift:** Does the hidden head's emotion distribution on ambiguous utterances differ from clear ones? Neutral predictions dominate ambiguous utterances (49%), suggesting neutral is the default mask for suppressed emotions.
+
+---
+
+## 📂 Project Structure
+
+```
+.
+├── Hidden_Emotion_Detection_voice.ipynb   # Main notebook
+├── stage1_best.pt                         # Stage 1 checkpoint (auto-saved)
+├── stage2_adapters.pt                     # Stage 2 adapter weights
+├── stage3_best.pt                         # Final model checkpoint
+├── hidden_emotion_validation.png          # 3-panel validation figure
+├── kl_validation_results.csv             # Per-utterance results
+└── README.md
+```
+
+---
+
+## 🗺️ Roadmap
+
+- [ ] Integrate MSP-Podcast for richer SSL (60hrs natural speech, free academic license)
+- [ ] Real-time inference on microphone input
+- [ ] Gradio demo for audio upload + emotion visualization
+- [ ] Extend to more emotions (fear, disgust) using additional datasets
+- [ ] Cross-corpus evaluation on MELD or MSP-IMPROV
+
+---
+
+## 🙏 Acknowledgements
+
+- IEMOCAP dataset: USC Institute for Creative Technologies
+- CREMA-D: Houwei Cao et al., IEEE TASLP 2014
+- HuBERT: [facebook/hubert-base-ls960](https://huggingface.co/facebook/hubert-base-ls960)
+- Mentored by Prof. Subir Roy, RV University Bangalore
+
+---
+
+## 📄 License
+
+MIT License
