@@ -1,16 +1,74 @@
-# 🎙️ Hidden Emotion Detection Using Voice Signals
+:
 
-> A 3-stage deep learning framework that detects **suppressed and hidden emotions** in speech — emotions the speaker expresses outwardly versus what they actually feel underneath.
+🎙️ Hidden Emotion Detection Using Voice
+## Project Summary
 
----
+Developed an AI-powered speech emotion recognition system capable of identifying both explicit emotions expressed by a speaker and hidden emotional states that may be suppressed during speech. The solution leverages transformer-based speech representations, multi-stage training, and a dual-path attention architecture to analyze emotional characteristics from audio signals. The framework is trained using the IEMOCAP and CREMA-D datasets and validated through statistical analysis based on inter-annotator disagreement, enabling hidden emotion detection without requiring dedicated hidden emotion labels.
 
-## 📌 Overview
+## Problem Statement
 
-Human speech carries two emotional layers: the **explicit emotion** (what we express) and the **hidden emotion** (what we suppress). This project builds a system that detects both simultaneously using a HuBERT-based encoder with a novel **dual-path attention architecture**.
+Human speech often conveys two distinct emotional layers:
 
-The framework is trained on IEMOCAP and CREMA-D, and validated without any hidden emotion labels — using **inter-annotator disagreement entropy** as a proxy for emotional suppression. Where human raters disagreed on what emotion they heard, the model is expected to flag suppression.
+Explicit Emotion: The emotion directly expressed by the speaker.
+Hidden Emotion: The underlying emotional state that may be intentionally or unintentionally suppressed.
 
----
+Traditional speech emotion recognition models focus only on explicit emotions. This project extends conventional SER by introducing a mechanism capable of estimating suppressed emotional states through differences in learned attention representations.
+
+## Objectives
+Develop a speech emotion recognition framework using transformer-based speech embeddings.
+Detect both explicit and hidden emotions from speech.
+Improve contextual understanding using dual-path attention.
+Validate hidden emotion estimation without ground-truth hidden emotion labels.
+Build a scalable framework for future real-time emotion-aware applications.
+System Architecture
+
+(Keep your existing architecture diagram exactly as it is.)
+
+## Methodology
+**Stage 1 — Supervised Fine-Tuning**
+
+The pretrained HuBERT Base (facebook/hubert-base-ls960) model is fine-tuned on the IEMOCAP and CREMA-D datasets to classify four primary emotions: Angry, Happy, Neutral, and Sad. Class imbalance is handled using WeightedRandomSampler, while CosineAnnealingLR and label smoothing improve training stability.
+
+**Stage 2 — Self-Supervised Adapter Learning**
+
+Instead of retraining the complete encoder, lightweight bottleneck adapter layers are introduced into every transformer block. The HuBERT encoder remains frozen while only adapter parameters are optimized using masked waveform reconstruction, enabling efficient domain adaptation.
+
+**Stage 3 — Hidden Emotion Prediction**
+
+The final stage introduces two independent attention branches:
+
+Global Attention Head
+Local Window-Based Attention Head
+
+The global branch focuses on the overall emotional representation of the utterance, while the local branch captures subtle temporal variations that may correspond to suppressed emotions.
+
+The disagreement between these branches is quantified using KL Divergence, which serves as the suppression score.
+
+**Key Features**
+Three-stage deep learning architecture
+Transformer-based speech representation using HuBERT
+Parameter-Efficient Fine-Tuning (PEFT)
+Dual-path attention for explicit and hidden emotion modeling
+Statistical validation using inter-annotator disagreement
+End-to-end PyTorch implementation
+GPU-accelerated training on Google Colab
+
+**Technology Stack**
+Category	Technologies
+Programming Language	Python
+Framework	PyTorch
+Transformer Models	HuBERT
+Feature Extraction	Wav2Vec2 Feature Extractor
+Audio Processing	torchaudio
+Machine Learning	scikit-learn
+Statistical Analysis	SciPy
+Visualization	Matplotlib
+Dataset	IEMOCAP, CREMA-D
+Development Environment	Google Colab GPU
+
+
+
+
 
 ## 🏗️ Architecture — 3-Stage Pipeline
 
@@ -74,22 +132,6 @@ Loss = CE(explicit) + 1.0·CE(hidden) + 0.1·cosine_similarity − 0.1·KL
 ```
 The orthogonality regularizer pushes the two attention paths to learn different representations. The negative KL term maximizes their divergence — forcing the hidden head to find an alternate emotional interpretation.
 
----
-
-## 🛠️ Tech Stack
-
-| Component | Library / Tool |
-|---|---|
-| Speech encoder | `facebook/hubert-base-ls960` (HuBERT) |
-| Feature extraction | `Wav2Vec2FeatureExtractor` |
-| Deep learning | PyTorch, `torch.nn`, `torchaudio` |
-| Training infra | Google Colab (GPU), `WeightedRandomSampler` |
-| Datasets | IEMOCAP (Kaggle), CREMA-D (Kaggle) |
-| Validation | `scipy.stats` (Mann-Whitney U, Shannon entropy) |
-| Metrics | `sklearn` (classification report, AUC-ROC) |
-| Visualization | `matplotlib`, `gridspec` |
-
----
 
 ## 📊 Results
 
@@ -122,7 +164,23 @@ The orthogonality regularizer pushes the two attention paths to learn different 
 - angry → happy / neutral / angry → neutral: ~10.5% each
 
 ---
+## Application
+Mental health monitoring
+Human–Computer Interaction
+Intelligent Virtual Assistants
+Customer sentiment analysis
+Call center analytics
+Healthcare decision support
+Emotion-aware conversational AI
+Educational technology
 
+## Future Scope
+Real-time speech emotion detection
+Multilingual emotion recognition
+Cross-dataset generalization
+Deployment using FastAPI
+Interactive Gradio web application
+Integration with Large Language Models (LLMs)
 ## 🚀 Getting Started
 
 ### 1. Clone & Open in Colab
