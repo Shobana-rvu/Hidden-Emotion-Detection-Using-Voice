@@ -196,6 +196,15 @@ Since no ground truth labels for hidden emotions exist, validation uses a 3-chec
 
 ---
 
+## Hidden Emotion Detection Using Voice
+
+## My Contributions
+
+Contributed to the end-to-end development of the speech emotion recognition pipeline using HuBERT, Wav2Vec2, and PyTorch.
+Participated in audio preprocessing, model training, feature extraction, and evaluation using the IEMOCAP and CREMA-D datasets.
+Assisted in implementing and validating the dual-path attention mechanism for improved hidden emotion detection.
+Collaborated with the team in debugging, performance optimization, experimentation, and documentation.
+
 ## 📂 Project Structure
 
 ```
